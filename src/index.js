@@ -1,6 +1,10 @@
 const { ApolloServer } = require("apollo-server");
+const { PrismaClient } = require("@prisma/client");
+
 const fs = require("fs");
 const path = require("path");
+
+const prisma = new PrismaClient();
 
 let links = [
   {
@@ -13,31 +17,32 @@ let links = [
 const resolvers = {
   Query: {
     info: () => `This is the API of a Hackernews Clone`,
-    feed: () => links,
+    feed: async (parent, args, context) => {
+      return context.prisma.link.findMany();
+    },
     link: (parent, args) => links.find((e) => e.id === args.id),
   },
   Mutation: {
-    post: (parent, args) => {
-      let idCount = links.length;
-
-      const link = {
-        id: `link-${idCount++}`,
-        description: args.description,
-        url: args.url,
-      };
-      links.push(link);
-      return link;
+    post: async (parent, args, context, info) => {
+      const newLink = await context.prisma.link.create({
+        data: {
+          url: args.url,
+          description: args.description,
+        },
+      });
+      return newLink;
     },
     updateLink: (parent, args) => {
       // find the element
-      const element = links.find((e) => e.id === args.id)
+      const element = links.find((e) => e.id === args.id);
       // find element index
       const indexOfElement = links.findIndex((e) => e.id === args.id);
       // return null if index = -1
       if (indexOfElement === -1) return null;
       // modify the element
       if (args.url) links[indexOfElement].url = args.url;
-      if (args.description) links[indexOfElement].description = args.description;
+      if (args.description)
+        links[indexOfElement].description = args.description;
       // return the element
       return links[indexOfElement];
     },
@@ -52,7 +57,7 @@ const resolvers = {
       delete links[indexOfElement];
       // return the element
       return element;
-    }
+    },
   },
   Link: {
     id: (parent) => parent.id,
@@ -64,6 +69,9 @@ const resolvers = {
 const server = new ApolloServer({
   typeDefs: fs.readFileSync(path.join(__dirname, "schema.graphql"), "utf8"),
   resolvers,
+  context: {
+    prisma,
+  },
 });
 
 server.listen().then(({ url }) => console.log(`Server is running on ${url}`));
